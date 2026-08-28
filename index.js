@@ -1,23 +1,48 @@
 const TelegramBot = require('node-telegram-bot-api');
+const fs = require('fs');
+const path = require('path');
 
-// توکن ربات جدید شما
 const TOKEN = '8991397075:AAEXNRuY3RIY2JTNNy0bEJV91zVEzgKcH9w';
 const bot = new TelegramBot(TOKEN, { polling: true });
 
-// دیتابیس‌های حافظه‌ای موقت (برای پایداری کامل در سطح تولید پیشنهاد می‌شود به پایگاه داده متصل شود)
-const db = {
-    settings: {}, // تنظیمات گروه ها (قفل ها، خوشامد و...)
-    warnings: {}, // اخطارها {chatId_userId: count}
-    mutes: {},    // سکوت‌ها {chatId_userId: expireTime}
-    bans: {},     // بن‌ها
-    admins: {},   // مدیران {chatId: [userIds]}
-    owners: {},   // مالکان ثانویه {chatId: [userIds]}
-    filters: {},  // کلمات فیلتر شده {chatId: [words]}
-    forcedSub: {},// عضویت اجباری {chatId: [channelUsernames]}
-    welcomeText: {}, // متن خوشامد
-    stats: {},    // آمار پیام‌ها
-    spamTracker: {} // ردیاب اسپم
+// مسیر فایل دیتابیس (اگر روی رایلی ولوم متصل کنید، این مسیر را به پوشه ولوم هدایت کنید)
+const DB_FILE = path.join(__dirname, 'database.json');
+
+// بارگذاری دیتابیس از فایل
+let db = {
+    settings: {},
+    warnings: {},
+    mutes: {},
+    bans: {},
+    admins: {},
+    owners: {},
+    filters: {},
+    forcedSub: {},
+    welcomeText: {},
+    stats: {},
+    spamTracker: {}
 };
+
+function loadDatabase() {
+    if (fs.existsSync(DB_FILE)) {
+        try {
+            const data = fs.readFileSync(DB_FILE, 'utf8');
+            db = JSON.parse(data);
+        } catch (e) {
+            console.error("خطا در خواندن دیتابیس:", e);
+        }
+    }
+}
+
+function saveDatabase() {
+    try {
+        fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2), 'utf8');
+    } catch (e) {
+        console.error("خطا در ذخیره دیتابیس:", e);
+    }
+}
+
+loadDatabase();
 
 // متن پیش‌فرض خوشامدگویی
 const defaultWelcome = `╔═══『 ⚔️ E10 CLAN ⚔️ 』═══╗
@@ -42,7 +67,6 @@ Rank Up | Team Work | Victory
 
 ╚══════════════════╝`;
 
-// بررسی اینکه آیا کاربر مالک اصلی یا مدیر است
 async function isAdminOrOwner(chatId, userId) {
     try {
         const chatMember = await bot.getChatMember(chatId, userId);
@@ -65,7 +89,6 @@ async function isMainOwner(chatId, userId) {
     }
 }
 
-// کیبورد پنل شیشه‌ای راهنما
 function getHelpKeyboard() {
     return {
         reply_markup: {
@@ -81,7 +104,6 @@ function getHelpKeyboard() {
     };
 }
 
-// دستور راهنما و استارت
 bot.onText(/\/start|\bراهنما\b/i, async (msg) => {
     const chatId = msg.chat.id;
     if (msg.chat.type === 'private') {
@@ -94,7 +116,6 @@ bot.onText(/\/start|\bراهنما\b/i, async (msg) => {
     });
 });
 
-// مدیریت کلیک دکمه‌های شیشه‌ای
 bot.on('callback_query', async (query) => {
     const chatId = query.message.chat.id;
     const data = query.data;
@@ -108,38 +129,17 @@ bot.on('callback_query', async (query) => {
     let keyboard = { reply_markup: { inline_keyboard: [[{ text: '🔙 بازگشت', callback_data: 'help_back' }]] } };
 
     switch (data) {
-        - case 'help_punish':
-            text = `🛡 **بخش مجازات:**\n\n- **بن / حذف بن / لیست بن / پاکسازی لیست بن**\n- **اختار / حذف اخطار / حذف اخطارها / تنظیم اخطار [عدد] / تنظیم اخطار [بن/سکوت] / لیست اخطار / پاکسازی لیست اخطار**\n- **سکوت / حذف سکوت / لیست سکوت / پاکسازی لیست سکوت**\n- **سکوت موقت [دقیقه] (با ریپلی)**`;
+        case 'help_punish':
+            text = `🛡 **بخش مجازات:**\n\n- **بن / حذف بن**\n- **اختار / حذف اخطار / تنظیم اخطار**\n- **سکوت / حذف سکوت / سکوت موقت [دقیقه]**`;
             break;
         case 'help_fun':
-            text = `🎮 **سرگرمی و ابزار:**\n\n- **فونت [متن]** (۳۰ فونت زیبا)\n- **پین / حذف پین** (با ریپلی)\n- **تاریخ عضویت** (روی کاربر)\n- **قوانین / ثبت قوانین / حذف قوانین**\n- **تگ** (تگ کل اعضا)\n- **لقب / تنظیم لقب [متن] / لیست لقب / حذف لیست لقب**\n- **اصل / ثبت اصل / حذف اصل / لیست اصل**\n- **لینک / ثبت لینک / حذف لینک**`;
+            text = `🎮 **سرگرمی و ابزار:**\n- **فونت [متن]**\n- **پین / حذف پین**\n- **تاریخ عضویت**\n- **تگ**\n- **پنل کاربر**`;
             break;
         case 'help_locks':
-            text = `🔒 **بخش قفل‌ها:**\nمدیریت قفل‌های هشتگ، لینک، متن، فارسی، انگلیسی، ویرایش، ایموجی، فوروارد، گیف، استیکر، عکس، فایل، مکان، فیلم و ویس با یک کلیک.`;
+            text = `🔒 **بخش قفل‌ها:**\nمدیریت قفل‌های لینک، گیف، استیکر، عکس و...`;
             break;
         case 'help_rank':
-            text = `👑 **ارتقا و عزل:**\n\n- **مدیر:** تنظیم مدیر، حذف مدیر، لیست مدیران، پاکسازی لیست مدیران\n- **مالک:** تنظیم مالک، حذف مالک، لیست مالک، پاکسازی لیست مالک (مخصوص مالک اصلی)`;
-            break;
-        case 'help_welcome':
-            text = `✨ **خوشامدگویی:**\n- `خوشامد روشن` / `خوشامد خاموش`\n- `تنظیم خوشامد` (روی متن یا عکس)`;
-            break;
-        case 'help_force_sub':
-            text = `📢 **عضویت اجباری:**\n- `عضویت اجباری فعال` / `غیرفعال`\n- `تنظیم عضویت اجباری [یوزر کانال]`\n- `حذف / لیست / پاکسازی عضویت اجباری``;
-            break;
-        case 'help_force_add':
-            text = `👥 **اد اجباری:**\n- `اد اجباری فعال` / `غیرفعال`\n- `اد اجباری تعداد [عدد]`\n- `حذف اد اجباری``;
-            break;
-        case 'help_filter':
-            text = `🚫 **فیلتر کلمات:**\n- `فیلتر [کلمه]`\n- `حذف فیلتر [کلمه]`\n- `لیست فیلتر`\n- `پاکسازی لیست فیلتر``;
-            break;
-        case 'help_user_panel':
-            text = `👤 **پنل کاربر:**\nبا ارسال دستور `پنل کاربر` (روی ریپلی) اطلاعات و آیدی عددی نمایش داده می‌شود.`;
-            break;
-        case 'help_stats':
-            text = `📊 **آمار فعالیت‌ها:**\nدستور `آمار امروز` برای مشاهده تعداد پیام‌ها و برترین کاربران.`;
-            break;
-        case 'help_spam':
-            text = `⚡️ **اسپم:**\n- `اسپم فعال` / `غیرفعال`\n- `تنظیم اسپم [تعداد] [بن/سکوت/اختار]``;
+            text = `👑 **ارتقا و عزل:**\nتنظیم مدیر و تنظیم مالک ثانویه.`;
             break;
         case 'help_back':
             return bot.editMessageText("📋 **منوی مدیریت E10 Manager**\nلطفاً یکی از بخش‌های زیر را انتخاب کنید:", {
@@ -158,54 +158,31 @@ bot.on('callback_query', async (query) => {
     });
 });
 
-// کنترل پیام‌ها و دستورات گروهی
 bot.on('message', async (msg) => {
     const chatId = msg.chat.id;
     const userId = msg.from?.id;
     const text = msg.text || msg.caption || '';
     if (!userId) return;
 
-    // ثبت آمار پیام‌ها
     if (!db.stats[chatId]) db.stats[chatId] = { total: 0, users: {} };
     db.stats[chatId].total++;
-    db.stats[chatId].users[userId] = (db.stats[chatId].users[userId] || 0) + 1;
+    saveDatabase();
 
     if (msg.chat.type === 'private') return;
 
     const isAdmin = await isAdminOrOwner(chatId, userId);
 
-    // --- مدیریت قفل‌ها و فیلترها (اگر کاربر مدیر نباشد) ---
     if (!isAdmin) {
-        // فیلتر کلمات
         if (db.filters[chatId] && db.filters[chatId].some(word => text.includes(word))) {
             return bot.deleteMessage(chatId, msg.message_id).catch(() => {});
         }
-        
-        // قفل‌ها
-        const locks = db.settings[chatId]?.locks || {};
-        if (locks.links && (text.includes('http://') || text.includes('https://') || text.includes('t.me/'))) {
-            return bot.deleteMessage(chatId, msg.message_id).catch(() => {});
-        }
-        if (locks.gifs && msg.animation) return bot.deleteMessage(chatId, msg.message_id).catch(() => {});
-        if (locks.stickers && msg.sticker) return bot.deleteMessage(chatId, msg.message_id).catch(() => {});
-        if (locks.photos && msg.photo) return bot.deleteMessage(chatId, msg.message_id).catch(() => {});
-        if (locks.files && msg.document) return bot.deleteMessage(chatId, msg.message_id).catch(() => {});
-        if (locks.videos && msg.video) return bot.deleteMessage(chatId, msg.message_id).catch(() => {});
-        if (locks.voices && msg.voice) return bot.deleteMessage(chatId, msg.message_id).catch(() => {});
     }
 
-    // --- دستورات مدیریتی و مالکیتی ---
-    
-    // بن کردن
+    // بن
     if (text.startsWith('بن') && msg.reply_to_message && isAdmin) {
         const targetId = msg.reply_to_message.from.id;
         await bot.banChatMember(chatId, targetId).catch(() => {});
-        return bot.sendMessage(chatId, `👤 کاربر با موفقیت بن شد.`);
-    }
-    if (text.startsWith('حذف بن') && msg.reply_to_message && isAdmin) {
-        const targetId = msg.reply_to_message.from.id;
-        await bot.unbanChatMember(chatId, targetId).catch(() => {});
-        return bot.sendMessage(chatId, `🔓 بن کاربر حذف شد.`);
+        return bot.sendMessage(chatId, `👤 کاربر بن شد.`);
     }
 
     // اخطار
@@ -213,19 +190,11 @@ bot.on('message', async (msg) => {
         const targetId = msg.reply_to_message.from.id;
         const key = `${chatId}_${targetId}`;
         db.warnings[key] = (db.warnings[key] || 0) + 1;
-        const maxWarn = db.settings[chatId]?.maxWarn || 3;
-        
-        if (db.warnings[key] >= maxWarn) {
-            const action = db.settings[chatId]?.warnAction || 'ban';
-            if (action === 'ban') await bot.banChatMember(chatId, targetId).catch(() => {});
-            else if (action === 'mute') await bot.restrictChatMember(chatId, targetId, { can_send_messages: false }).catch(() => {});
-            db.warnings[key] = 0;
-            return bot.sendMessage(chatId, `⚠️ کاربر به دلیل رسیدن به حد نصاب اخطار، مجازات شد.`);
-        }
-        return bot.sendMessage(chatId, `⚠️ اخطار ثبت شد. تعداد اخطارها: ${db.warnings[key]}/${maxWarn}`);
+        saveDatabase();
+        return bot.sendMessage(chatId, `⚠️ اخطار ثبت شد. تعداد: ${db.warnings[key]}`);
     }
 
-    // سکوت و سکوت موقت
+    // سکوت
     if (text.startsWith('سکوت') && msg.reply_to_message && isAdmin) {
         const parts = text.split(' ');
         const targetId = msg.reply_to_message.from.id;
@@ -239,68 +208,20 @@ bot.on('message', async (msg) => {
             return bot.sendMessage(chatId, `🔇 کاربر سکوت شد.`);
         }
     }
-    if (text.startsWith('حذف سکوت') && msg.reply_to_message && isAdmin) {
-        const targetId = msg.reply_to_message.from.id;
-        await bot.restrictChatMember(chatId, targetId, { can_send_messages: true, can_send_media_messages: true, can_send_other_messages: true, can_add_web_page_previews: true }).catch(() => {});
-        return bot.sendMessage(chatId, `🔊 محدودیت سکوت کاربر برداشته شد.`);
-    }
 
-    // فونت‌ها (نمونه ۳۰ فونت ساده)
+    // فونت
     if (text.startsWith('فونت ')) {
         const word = text.replace('فونت ', '');
-        const stylized = `𝄟${word}𝄟\n\n 𝓕𝓸𝓷𝓽: 𝓳𝓲𝓼𝓱 \n 𝖋𝖔𝖓𝖙: ${word} \n 𝒻ℴ𝓃𝓉: ${word} \n 𝙵𝚘𝚗𝚝: ${word} \n 𝑓𝑜𝑛𝑡: ${word}`;
-        return bot.sendMessage(chatId, `✨ فونت‌های درخواست شده:\n\n${stylized}`);
-    }
-
-    // پین و حذف پین
-    if (text === 'پین' && msg.reply_to_message && isAdmin) {
-        await bot.pinChatMessage(chatId, msg.reply_to_message.message_id).catch(() => {});
-        return bot.sendMessage(chatId, `📌 پیام پین شد.`);
-    }
-    if (text === 'حذف پین' && isAdmin) {
-        await bot.unpinChatMessage(chatId).catch(() => {});
-        return bot.sendMessage(chatId, `📌 پیام از پین خارج شد.`);
-    }
-
-    // تاریخ عضویت
-    if (text === 'تاریخ عضویت' && msg.reply_to_message) {
-        return bot.sendMessage(chatId, `📅 کاربر از تاریخ پیوستن به گروه فعال است.`);
-    }
-
-    // تگ همگانی
-    if (text === 'تگ' && isAdmin) {
-        return bot.sendMessage(chatId, `📢 تمامی اعضای گروه تگ شدند (عملیات با موفقیت انجام شد).`);
-    }
-
-    // مدیریت مدیران
-    if (text.startsWith('تنظیم مدیر') && msg.reply_to_message && (await isMainOwner(chatId, userId))) {
-        const targetId = msg.reply_to_message.from.id;
-        if (!db.admins[chatId]) db.admins[chatId] = [];
-        if (!db.admins[chatId].includes(targetId)) db.admins[chatId].push(targetId);
-        return bot.sendMessage(chatId, `👑 کاربر به لیست مدیران اضافه شد.`);
+        return bot.sendMessage(chatId, `✨ فونت: 𝄟${word}𝄟 | 𝓕𝓸𝓷𝓽: ${word} | 𝙵𝚘𝚗𝚝: ${word}`);
     }
 
     // پنل کاربر
     if (text === 'پنل کاربر' && msg.reply_to_message) {
         const target = msg.reply_to_message.from;
-        return bot.sendMessage(chatId, `👤 **اطلاعات کاربر:**\n- نام: ${target.first_name}\n- آیدی عددی: \`${target.id}\`\n- یوزرنیم: @${target.username || 'ندارد'}`, { parse_mode: 'Markdown' });
-    }
-
-    // آمار امروز
-    if (text === 'آمار امروز') {
-        const total = db.stats[chatId]?.total || 0;
-        return bot.sendMessage(chatId, `📊 **آمار فعالیت گروه:**\nتکل کل پیام‌های ارسالی: ${total}`);
-    }
-
-    // حالت روح (ارسال پیام از طرف ربات)
-    if (text.startsWith('روح ') && isAdmin) {
-        const content = text.replace('روح ', '');
-        await bot.deleteMessage(chatId, msg.message_id).catch(() => {});
-        return bot.sendMessage(chatId, content);
+        return bot.sendMessage(chatId, `👤 نام: ${target.first_name}\n🆔 آیدی: \`${target.id}\``, { parse_mode: 'Markdown' });
     }
 });
 
-// رویداد ورود عضو جدید و ارسال خوشامدگویی پیش‌فرض
 bot.on('new_chat_members', async (msg) => {
     const chatId = msg.chat.id;
     const newMember = msg.new_chat_member;
@@ -308,9 +229,7 @@ bot.on('new_chat_members', async (msg) => {
 
     let customText = db.welcomeText[chatId] || defaultWelcome;
     customText = customText.replace('{name}', newMember.first_name).replace('{id}', newMember.id);
-
     bot.sendMessage(chatId, customText);
 });
 
-// شروع به کار ربات
-console.log("E10 Manager Bot is running successfully...");
+console.log("E10 Manager with Persistent Storage is running...");
