@@ -1,0 +1,15 @@
+{
+  "name": "e10-manager",
+  "version": "1.0.0",
+  "description": "E10 Clan Group Manager Bot",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "node-telegram-bot-api": "^0.66.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
